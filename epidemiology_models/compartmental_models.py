@@ -4,29 +4,25 @@ from datetime import timedelta
 from datetime import timezone
 
 
-class SIRModel:
+class BaseModel:
+    """ Generic base model to implement numerical integration of epidemiology models as reported on
+        https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology
+    """
+
     def __init__(self, params, initial_conditions):
         """ params - dict<str, float> - parameters for model
-                                        keys = {'beta', 'gamma', 'N'}
             initial_conditions - dict<str, float> - initial condition for model
-                                                    keys = {'S', 'I', 'R'}
         """
         self._params = params
         self._initial_conditions = initial_conditions
 
     def _deriv(self, p, c):
         """ p - dict<str, float> - parameters for model
-                                   keys = {'beta', 'gamma', 'N'}
             c - dict<str, float> - current state of model
-                                   keys = {'S', 'I', 'R'}
 
-            returns time derivative, dict<str, float>, keys = {'S', 'I', 'R'}
+            returns time derivative, dict<str, float>
         """
-        deriv = {}
-        deriv['S'] = - p['beta'] * c['I'] * c['S'] / p['N']
-        deriv['R'] = p['gamma'] * c['I']
-        deriv['I'] = - deriv['S'] - deriv['R']
-        return deriv
+        raise NotImplementedError
 
     def get_numerical_results(self, n_sample, dt_secs, init_time=None):
         """ n_sample - int - number of samples to generate
@@ -49,3 +45,92 @@ class SIRModel:
                            for x in range(n_sample)]
         df.set_index('timestamp')
         return df
+
+    def get_R0(self):
+        """ return the basic reproduction number of the model """
+        raise NotImplementedError
+
+
+class SIRModel(BaseModel):
+    """ SIR model as reported on
+        https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology
+
+        model:
+        S -> I -> R
+        where:
+        S(t) = number of susceptible in population
+        I(t) = number of infected in population
+        R(t) = number of recovered in population
+        S + I + R = N
+
+        model parameters:
+        N - int(count) - number of people in the population
+        beta - float(Hz) - inverse of the time between contacts
+        gamma - float(Hz) - inverse of the recovery time
+
+        R0 = beta/gamma
+    """
+
+    def _deriv(self, p, c):
+        """ p - dict<str, float> - parameters for model
+                                   keys = {'beta', 'gamma', 'N'}
+            c - dict<str, float> - current state of model
+                                   keys = {'S', 'I', 'R'}
+
+            returns time derivative, dict<str, float>, keys = {'S', 'I', 'R'}
+        """
+        deriv = {}
+        deriv['S'] = - p['beta'] * c['I'] * c['S'] / p['N']
+        deriv['R'] = p['gamma'] * c['I']
+        deriv['I'] = - deriv['S'] - deriv['R']
+        return deriv
+
+    def get_R0(self):
+        """ return the basic reproduction number of the model """
+        p = self._params
+        return p['beta']/p['gamma']
+
+
+class SEIRModel(BaseModel):
+    """ SEIR model as reported on
+        https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology
+
+        model:
+        S -> E -> I -> R
+        where:
+        S(t) = number of susceptible in population
+        E(t) = number of exposed in population
+        I(t) = number of infected in population
+        R(t) = number of recovered in population
+        S + E + I + R = N
+
+        model parameters:
+        N - int(count) - number of people in the population
+        beta - float(Hz) - inverse of the time between contacts
+        gamma - float(Hz) - inverse of the recovery time
+        lambda - float(Hz) - population birth rate
+        mu - float(Hz) - population natural death rate
+        a - float(Hz) - inverse of average incubation period; from exponential distribution
+
+        R0 = (a/(mu+a))*(beta/(mu+gamma))
+    """
+
+    def _deriv(self, p, c):
+        """ p - dict<str, float> - parameters for model
+                                   keys = {'beta', 'gamma', 'N', 'mu', 'lambda', 'a'}
+            c - dict<str, float> - current state of model
+                                   keys = {'S', 'I', 'E', 'R'}
+
+            returns time derivative, dict<str, float>, keys = {'S', 'I', 'E', 'R'}
+        """
+        deriv = {}
+        deriv['S'] = (p['lambda'] - p['mu']) * c['S'] - p['beta'] * c['I'] * c['S'] / p['N']
+        deriv['R'] = p['gamma'] * c['I'] - p['mu'] * c['R']
+        deriv['I'] = p['a'] * c['E'] - (p['gamma'] + p['mu'])*c['I']
+        deriv['E'] = - deriv['I'] - deriv['R'] - deriv['S']
+        return deriv
+
+    def get_R0(self):
+        """ return the basic reproduction number of the model """
+        p = self._params
+        return p['a'] * p['beta'] / ((p['mu']+p['a']) * (p['mu']+p['gamma']))
