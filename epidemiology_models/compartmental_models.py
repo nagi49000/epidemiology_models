@@ -145,7 +145,7 @@ class SEIRModel(BaseModel):
 
 
 class SISModel(BaseModel):
-    """ SIR model as reported on
+    """ SIS model as reported on
         https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology
 
         model:
