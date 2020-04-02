@@ -68,20 +68,28 @@ class SIRModel(BaseModel):
         beta - float(Hz) - inverse of the time between contacts
         gamma - float(Hz) - inverse of the recovery time
 
+        optional model parameters:
+        Lambda - float(Hz) - population natural death rate
+        mu - float(Hz) - birth rate
+
         R0 = beta/gamma
     """
 
     def _deriv(self, p, c):
         """ p - dict<str, float> - parameters for model
                                    keys = {'beta', 'gamma', 'N'}
+                                   optional keys = {'Lambda', 'mu'}
             c - dict<str, float> - current state of model
                                    keys = {'S', 'I', 'R'}
 
             returns time derivative, dict<str, float>, keys = {'S', 'I', 'R'}
         """
+        p = p.copy()  # leave calling ref unchanged
+        p['Lambda'] = p.get('Lambda', 0.0)
+        p['mu'] = p.get('mu', 0.0)
         deriv = {}
-        deriv['S'] = - p['beta'] * c['I'] * c['S'] / p['N']
-        deriv['R'] = p['gamma'] * c['I']
+        deriv['S'] = (p['Lambda'] - p['mu']) * c['S'] - p['beta'] * c['I'] * c['S'] / p['N']
+        deriv['R'] = p['gamma'] * c['I'] - p['mu'] * c['R']
         deriv['I'] = - deriv['S'] - deriv['R']
         return deriv
 
@@ -134,3 +142,41 @@ class SEIRModel(BaseModel):
         """ return the basic reproduction number of the model """
         p = self._params
         return p['a'] * p['beta'] / ((p['mu']+p['a']) * (p['mu']+p['gamma']))
+
+
+class SISModel(BaseModel):
+    """ SIR model as reported on
+        https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology
+
+        model:
+        S <-> I
+        where:
+        S(t) = number of susceptible in population
+        I(t) = number of infected in population
+        S + I = N
+
+        model parameters:
+        N - int(count) - number of people in the population
+        beta - float(Hz) - inverse of the time between contacts
+        gamma - float(Hz) - inverse of the recovery time
+
+        R0 = beta/gamma
+    """
+
+    def _deriv(self, p, c):
+        """ p - dict<str, float> - parameters for model
+                                   keys = {'beta', 'gamma', 'N'}
+            c - dict<str, float> - current state of model
+                                   keys = {'S', 'I', 'R'}
+
+            returns time derivative, dict<str, float>, keys = {'S', 'I', 'R'}
+        """
+        deriv = {}
+        deriv['S'] = p['gamma'] * c['I'] - p['beta'] * c['I'] * c['S'] / p['N']
+        deriv['I'] = - deriv['S']
+        return deriv
+
+    def get_R0(self):
+        """ return the basic reproduction number of the model """
+        p = self._params
+        return p['beta']/p['gamma']
