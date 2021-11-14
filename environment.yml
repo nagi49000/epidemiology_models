@@ -1,0 +1,10 @@
+name: epidemiology_models_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - pandas>=1.0.3
+  - pytest>=5.4.1
+  - pytest-cov>=2.8.1
+  - python>=3.8.2
+  - seaborn>=0.10.0
